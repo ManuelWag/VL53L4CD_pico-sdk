@@ -37,14 +37,6 @@
 
 #include "vl53l4cd_class.h"
 
-#ifndef DEFAULT_I2C_BUFFER_LEN
-  #ifdef BUFFER_LENGTH
-    #define DEFAULT_I2C_BUFFER_LEN  BUFFER_LENGTH
-  #else
-    #define DEFAULT_I2C_BUFFER_LEN  32
-  #endif
-#endif
-
 uint8_t VL53L4CD::VL53L4CD_RdDWord(uint16_t dev, uint16_t RegisterAdress, uint32_t *value)
 {
   uint8_t status = 0;
@@ -78,38 +70,59 @@ uint8_t VL53L4CD::VL53L4CD_RdByte(uint16_t dev, uint16_t RegisterAdress, uint8_t
 
 uint8_t VL53L4CD::VL53L4CD_WrByte(uint16_t dev, uint16_t RegisterAdress, uint8_t value)
 {
+  uint8_t buffer[3];
   uint8_t status = 0;
-  status = VL53L4CD_I2CWrite(dev, RegisterAdress, &value, 1);
-  return status;
+
+  buffer[0] = (RegisterAdress >> 8) & 0xFF;
+  buffer[1] = RegisterAdress & 0xFF;
+  buffer[2] = value & 0xFF;
+  status = i2c_write_blocking(dev_i2c, (uint8_t)((dev >> 1) & 0x7F), buffer, sizeof(buffer), false);
+  if(status == sizeof(buffer)){
+    return 0;
+  }
+  return 0;
 }
 
 uint8_t VL53L4CD::VL53L4CD_WrWord(uint16_t dev, uint16_t RegisterAdress, uint16_t value)
 {
   uint8_t status = 0;
-  uint8_t buffer[2];
+  uint8_t buffer[4];
 
-  buffer[0] = value >> 8;
-  buffer[1] = value & 0x00FF;
-  status = VL53L4CD_I2CWrite(dev, RegisterAdress, (uint8_t *)buffer, 2);
+  buffer[0] = (RegisterAdress >> 8) & 0xFF;
+  buffer[1] = RegisterAdress & 0xFF;
+  buffer[2] = value >> 8;
+  buffer[3] = value & 0x00FF;
+
+  status = i2c_write_blocking(dev_i2c, (uint8_t)((dev >> 1) & 0x7F), buffer, sizeof(buffer), false);
+  if(status == sizeof(buffer)){
+    return 0;
+  }
+
   return status;
 }
 
 uint8_t VL53L4CD::VL53L4CD_WrDWord(uint16_t dev, uint16_t RegisterAdress, uint32_t value)
 {
   uint8_t status = 0;
-  uint8_t buffer[4];
+  uint8_t buffer[6];
 
-  buffer[0] = (value >> 24) & 0xFF;
-  buffer[1] = (value >> 16) & 0xFF;
-  buffer[2] = (value >>  8) & 0xFF;
-  buffer[3] = (value >>  0) & 0xFF;
-  status = VL53L4CD_I2CWrite(dev, RegisterAdress, (uint8_t *)buffer, 4);
+  buffer[0] = (RegisterAdress >> 8) & 0xFF;
+  buffer[1] = RegisterAdress & 0xFF;
+  buffer[2] = (value >> 24) & 0xFF;
+  buffer[3] = (value >> 16) & 0xFF;
+  buffer[4] = (value >>  8) & 0xFF;
+  buffer[5] = (value >>  0) & 0xFF;
+
+  status = i2c_write_blocking(dev_i2c, (uint8_t)((dev >> 1) & 0x7F), buffer, sizeof(buffer), false);
+  if(status == sizeof(buffer)){
+    return 0;
+  }
   return status;
 }
 
 void VL53L4CD::WaitMs(uint32_t TimeMs)
 {
-  delay(TimeMs);
+  sleep_ms(TimeMs);
 }
 
 uint8_t VL53L4CD::VL53L4CD_I2CRead(uint8_t DeviceAddr, uint16_t RegisterAddress, uint8_t *p_values, uint32_t size)
@@ -117,79 +130,10 @@ uint8_t VL53L4CD::VL53L4CD_I2CRead(uint8_t DeviceAddr, uint16_t RegisterAddress,
   int status = 0;
   uint8_t buffer[2];
 
-  // Loop until the port is transmitted correctly
-  do {
-    dev_i2c->beginTransmission((uint8_t)((DeviceAddr >> 1) & 0x7F));
+  buffer[0] = (uint8_t)(RegisterAddress >> 8);
+  buffer[1] = (uint8_t)(RegisterAddress & 0xFF);
+  status = i2c_write_blocking(dev_i2c, (uint8_t)((DeviceAddr >> 1) & 0x7F), buffer, 2, false);
+  status = i2c_read_blocking(dev_i2c, ((uint8_t)((DeviceAddr >> 1) & 0x7F)), p_values, size, true);
 
-    // Target register address for transfer
-    buffer[0] = (uint8_t)(RegisterAddress >> 8);
-    buffer[1] = (uint8_t)(RegisterAddress & 0xFF);
-    dev_i2c->write(buffer, 2);
-
-    status = dev_i2c->endTransmission(false);
-
-    // Fix for some STM32 boards
-    // Reinitialize the i2c bus with the default parameters
-#ifdef ARDUINO_ARCH_STM32
-    if (status) {
-      dev_i2c->end();
-      dev_i2c->begin();
-    }
-#endif
-    // End of fix
-
-  } while (status != 0);
-
-  uint32_t i = 0;
-  if (size > DEFAULT_I2C_BUFFER_LEN) {
-    while (i < size) {
-      // If still more than DEFAULT_I2C_BUFFER_LEN bytes to go, DEFAULT_I2C_BUFFER_LEN,
-      // else the remaining number of bytes
-      uint8_t current_read_size = (size - i > DEFAULT_I2C_BUFFER_LEN ? DEFAULT_I2C_BUFFER_LEN : size - i);
-      dev_i2c->requestFrom(((uint8_t)((DeviceAddr >> 1) & 0x7F)),
-                           current_read_size);
-      while (dev_i2c->available()) {
-        p_values[i] = dev_i2c->read();
-        i++;
-      }
-    }
-  } else {
-    dev_i2c->requestFrom(((uint8_t)((DeviceAddr >> 1) & 0x7F)), size);
-    while (dev_i2c->available()) {
-      p_values[i] = dev_i2c->read();
-      i++;
-    }
-  }
-
-  return i != size;
-}
-
-uint8_t VL53L4CD::VL53L4CD_I2CWrite(uint8_t DeviceAddr, uint16_t RegisterAddress, uint8_t *p_values, uint32_t size)
-{
-  uint32_t i = 0;
-  uint8_t buffer[2];
-
-  while (i < size) {
-    // If still more than DEFAULT_I2C_BUFFER_LEN bytes to go, DEFAULT_I2C_BUFFER_LEN,
-    // else the remaining number of bytes
-    size_t current_write_size = (size - i > DEFAULT_I2C_BUFFER_LEN ? DEFAULT_I2C_BUFFER_LEN : size - i);
-
-    dev_i2c->beginTransmission((uint8_t)((DeviceAddr >> 1) & 0x7F));
-
-    // Target register address for transfer
-    buffer[0] = (uint8_t)((RegisterAddress + i) >> 8);
-    buffer[1] = (uint8_t)((RegisterAddress + i) & 0xFF);
-    dev_i2c->write(buffer, 2);
-    if (dev_i2c->write(p_values + i, current_write_size) == 0) {
-      return 1;
-    } else {
-      i += current_write_size;
-      if (size - i) {
-        // Flush buffer and send stop bit so we have compatibility also with ESP32 platforms
-        dev_i2c->endTransmission(true);
-      }
-    }
-  }
-
-  return dev_i2c->endTransmission(true);
+  return status != size;
 }

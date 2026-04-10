@@ -39,8 +39,8 @@
 #define __VL53L4CD_CLASS_H
 
 /* Includes ------------------------------------------------------------------*/
-#include "Arduino.h"
-#include "Wire.h"
+#include "hardware/i2c.h"
+#include "hardware/gpio.h"
 #include "vl53l4cd_api.h"
 
 /* Classes -------------------------------------------------------------------*/
@@ -54,7 +54,7 @@ class VL53L4CD {
      * @param[in] xshut_pin pin to be used as component LPn
      * @param[in] address I2C address to be used for the sensor instance
      */
-    VL53L4CD(TwoWire *i2c, int xshut_pin) : dev_i2c(i2c), xshut(xshut_pin)
+    VL53L4CD(i2c_inst_t * i2c, int xshut_pin) : dev_i2c(i2c), xshut(xshut_pin)
     {
       dev = 0x52;
     }
@@ -67,8 +67,9 @@ class VL53L4CD {
     virtual int begin()
     {
       if (xshut >= 0) {
-        pinMode(xshut, OUTPUT);
-        digitalWrite(xshut, LOW);
+        gpio_init(xshut);
+        gpio_set_dir(xshut, GPIO_OUT);
+        gpio_put(xshut, 0);
       }
       return 0;
     }
@@ -76,7 +77,8 @@ class VL53L4CD {
     virtual int end()
     {
       if (xshut >= 0) {
-        pinMode(xshut, INPUT);
+        gpio_init(xshut);
+        gpio_set_dir(xshut, GPIO_IN);
       }
       return 0;
     }
@@ -90,9 +92,9 @@ class VL53L4CD {
     virtual void VL53L4CD_On(void)
     {
       if (xshut >= 0) {
-        digitalWrite(xshut, HIGH);
+        gpio_put(xshut, 1);
       }
-      delay(10);
+      WaitMs(10);
     }
 
     /**
@@ -102,9 +104,9 @@ class VL53L4CD {
     virtual void VL53L4CD_Off(void)
     {
       if (xshut >= 0) {
-        digitalWrite(xshut, LOW);
+        gpio_put(xshut, 0);
       }
-      delay(10);
+      WaitMs(10);
     }
 
     /**
@@ -514,7 +516,7 @@ class VL53L4CD {
   protected:
 
     /* IO Device */
-    TwoWire *dev_i2c;
+    i2c_inst_t *dev_i2c;
     /* Digital out pin */
     int xshut;
     /* I2C address to use */
