@@ -77,10 +77,8 @@ uint8_t VL53L4CD::VL53L4CD_WrByte(uint16_t dev, uint16_t RegisterAdress, uint8_t
   buffer[1] = RegisterAdress & 0xFF;
   buffer[2] = value & 0xFF;
   status = i2c_write_blocking(dev_i2c, (uint8_t)((dev >> 1) & 0x7F), buffer, sizeof(buffer), false);
-  if(status == sizeof(buffer)){
-    return 0;
-  }
-  return 0;
+
+  return status != sizeof(buffer);
 }
 
 uint8_t VL53L4CD::VL53L4CD_WrWord(uint16_t dev, uint16_t RegisterAdress, uint16_t value)
@@ -94,11 +92,8 @@ uint8_t VL53L4CD::VL53L4CD_WrWord(uint16_t dev, uint16_t RegisterAdress, uint16_
   buffer[3] = value & 0x00FF;
 
   status = i2c_write_blocking(dev_i2c, (uint8_t)((dev >> 1) & 0x7F), buffer, sizeof(buffer), false);
-  if(status == sizeof(buffer)){
-    return 0;
-  }
 
-  return status;
+  return status != sizeof(buffer);
 }
 
 uint8_t VL53L4CD::VL53L4CD_WrDWord(uint16_t dev, uint16_t RegisterAdress, uint32_t value)
@@ -114,10 +109,8 @@ uint8_t VL53L4CD::VL53L4CD_WrDWord(uint16_t dev, uint16_t RegisterAdress, uint32
   buffer[5] = (value >>  0) & 0xFF;
 
   status = i2c_write_blocking(dev_i2c, (uint8_t)((dev >> 1) & 0x7F), buffer, sizeof(buffer), false);
-  if(status == sizeof(buffer)){
-    return 0;
-  }
-  return status;
+
+  return status != sizeof(buffer);
 }
 
 void VL53L4CD::WaitMs(uint32_t TimeMs)
